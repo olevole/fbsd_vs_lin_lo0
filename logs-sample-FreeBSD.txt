@@ -1,0 +1,41 @@
+root@pxebsd:~/fbsd-vs-lin# ./parselog.sh output/FreeBSD-1.log
+========================================
+  SUMMARY FOR: FreeBSD-1.log
+========================================
+Peak RPS:    272000 req/sec
+Average RPS: 269766 req/sec
+Latency p50: 0.369 ms
+Latency p99.9: 0.412 ms
+========================================
+Summary saved to: output/FreeBSD-1.summary
+
+root@pxebsd:~/fbsd-vs-lin# ./parselog.sh output/FreeBSD-2.log
+========================================
+  SUMMARY FOR: FreeBSD-2.log
+========================================
+Peak RPS:    277000 req/sec
+Average RPS: 271566 req/sec
+Latency p50: 0.733 ms
+Latency p99.9: 0.815 ms
+========================================
+Summary saved to: output/FreeBSD-2.summary
+root@pxebsd:~/fbsd-vs-lin# ./parselog.sh output/FreeBSD-3.log
+========================================
+  SUMMARY FOR: FreeBSD-3.log
+========================================
+Peak RPS:    272000 req/sec
+Average RPS: 269050 req/sec
+Latency p50: 1.11 ms
+Latency p99.9: 1.215 ms
+========================================
+Summary saved to: output/FreeBSD-3.summary
+root@pxebsd:~/fbsd-vs-lin# ./parselog.sh output/FreeBSD-4.log
+========================================
+  SUMMARY FOR: FreeBSD-4.log
+========================================
+Peak RPS:    270000 req/sec
+Average RPS: 265750 req/sec
+Latency p50: 1.498 ms
+Latency p99.9: 1.648 ms
+========================================
+Summary saved to: output/FreeBSD-4.summary

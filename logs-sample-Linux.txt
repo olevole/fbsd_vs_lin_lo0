@@ -1,0 +1,40 @@
+root@vm2pxe1:~/fbsd_vs_lin_lo0# ./parselog.sh output/Linux-1.log 
+========================================
+  SUMMARY FOR: Linux-1.log
+========================================
+Peak RPS:    171000 req/sec
+Average RPS: 168016 req/sec
+Latency p50: 0.592 ms
+Latency p99.9: 0.643 ms
+========================================
+Summary saved to: output/Linux-1.summary
+root@vm2pxe1:~/fbsd_vs_lin_lo0# ./parselog.sh output/Linux-2.log 
+========================================
+  SUMMARY FOR: Linux-2.log
+========================================
+Peak RPS:    328000 req/sec
+Average RPS: 321483 req/sec
+Latency p50: 0.589 ms
+Latency p99.9: 4.552 ms
+========================================
+Summary saved to: output/Linux-2.summary
+root@vm2pxe1:~/fbsd_vs_lin_lo0# ./parselog.sh output/Linux-3.log 
+========================================
+  SUMMARY FOR: Linux-3.log
+========================================
+Peak RPS:    460000 req/sec
+Average RPS: 435033 req/sec
+Latency p50: 0.447 ms
+Latency p99.9: 6.208 ms
+========================================
+Summary saved to: output/Linux-3.summary
+root@vm2pxe1:~/fbsd_vs_lin_lo0# ./parselog.sh output/Linux-4.log 
+========================================
+  SUMMARY FOR: Linux-4.log
+========================================
+Peak RPS:    663000 req/sec
+Average RPS: 588616 req/sec
+Latency p50: 0.506 ms
+Latency p99.9: 8.28 ms
+========================================
+Summary saved to: output/Linux-4.summary

@@ -1,0 +1,17 @@
+if [ ! "$_BENCH_SUBR" ]; then
+_BENCH_SUBR=1
+###
+
+PLATFORM=$( uname -s )
+
+case ${PLATFORM} in
+	Linux)
+		AWK_CMD="awk"
+		;;
+	FreeBSD)
+		AWK_CMD="gawk"
+		;;
+esac
+
+###
+fi
