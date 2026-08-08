@@ -17,15 +17,19 @@ mini_stat()
 	_ministat_args="-s -w 74"
 
 	[ -z "${MINISTAT_CMD}" ] && return 0
-	for i in $( seq 1 ${RUN_CORES} ); do
-		${progdir}/parselog-ministat.sh output/FreeBSD-${i}.log > output/ministat-${i}.log
+	for i in ${RUN_CORES_RANGE}; do
+		${progdir}/parselog-ministat.sh-alldata output/FreeBSD-${i}.log > output/ministat-${i}.log
+		${progdir}/parselog-ministat.sh-average output/FreeBSD-${i}.log | tee -a output/ministat-${i}.log.avg
 		_ministat_args="${_ministat_args} output/ministat-${i}.log"
 	done
 
-	set -o xtrace
-	${MINISTAT_CMD} ${_ministat_args}
-	set +o xtrace
+	if [ -z "${QUIET}" ]; then
+		set -o xtrace
+		${MINISTAT_CMD} ${_ministat_args} 1>&2
+		set +o xtrace
+	fi
 
+	return 0
 }
 
 

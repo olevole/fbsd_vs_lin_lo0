@@ -53,7 +53,7 @@ $1 == "99.9"   { p999 = $7 " ms"; }
 
 END {
     avg_rps = (count_rps > 0) ? int(sum_rps / count_rps) : 0;
-    
+
     # Выводим компактный отчет в консоль и файл
     printf "========================================\n"
     printf "  SUMMARY FOR: %s\n", LOGNAME

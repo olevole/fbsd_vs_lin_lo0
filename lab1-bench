@@ -12,24 +12,33 @@ mkdir ${progdir}/output
 
 init_cpuset_params()
 {
-	case ${CORES} in
-		1)
-			nginx_cpu=0
-			h1load_cpu=4
-			;;
-		2)
-			nginx_cpu="0-1"
-			h1load_cpu="4-5"
-			;;
-		3)
-			nginx_cpu="0-2"
-			h1load_cpu="4-6"
-			;;
-		4)
-			nginx_cpu="0-3"
-			h1load_cpu="4-7"
-			;;
-	esac
+	# Находим конечную точку для nginx
+	nginx_end=$((CORES - 1))
+
+	if [ "$nginx_end" -eq 0 ]; then
+		nginx_cpu="0"
+	else
+		nginx_cpu="0-${nginx_end}"
+	fi
+
+	# Находим стартовую точку для h1load
+	# Если ядер меньше 4, старт всегда 4. Если больше — равен числу ядер.
+	h1load_start=$CORES
+	if [ "$CORES" -lt 4 ]; then
+		h1load_start=4
+	fi
+
+	# Находим конечную точку для h1load
+	h1load_end=$((h1load_start + CORES - 1))
+
+	if [ "$h1load_start" -eq "$h1load_end" ]; then
+		h1load_cpu="${h1load_start}"
+	else
+		h1load_cpu="${h1load_start}-${h1load_end}"
+	fi
+
+	[ -z "${QUIET}" ] && echo "CORES=$CORES -> nginx_cpu=\"$nginx_cpu\" h1load_cpu=\"$h1load_cpu\"" >&2
+	return 0
 }
 
 
@@ -37,42 +46,49 @@ run_test()
 {
 	case "${PLATFORM}" in
 		FreeBSD)
-			for CORES in $( seq 1 ${RUN_CORES} ); do
-				echo "** CORES: ${CORES}"
+			for CORES in ${RUN_CORES_RANGE}; do
+				[ -z "${QUIET}" ] && echo "** CORES: ${CORES}" 1>&2
 				sed "s/%%WORKER_PROCESSES%%/${CORES}/g" ${progdir}/lab1/${PLATFORM}/etc/nginx/nginx.conf > /usr/local/etc/nginx/nginx.conf
 				concurrent=$(( 100 * CORES ))
 
 				init_cpuset_params
 
-				# NGINX запускаем на ядрах в диапазоне 0-3, HLOAD - 4-7
-				service nginx restart
+				service nginx restart > ${OUTPUT} 2>&1
 				for pid in $(pgrep nginx); do
-					cpuset -l ${nginx_cpu} -p ${pid}
+					cpuset -l ${nginx_cpu} -p ${pid} > ${OUTPUT}  2>&1
 				done
 				sleep 1
 
-				# Запускаем h1load на ядрах 4-8
-				cpuset -l ${h1load_cpu} h1load -d ${DURATION} -t ${CORES} -c ${concurrent} -r 5000 -P -S -l -A http://127.0.0.1:8080/index.html | tee -a  output/${PLATFORM}-${CORES}.log
+
+				if [ -z "${QUIET}" ]; then
+					cpuset -l ${h1load_cpu} h1load -d ${DURATION} -t ${CORES} -c ${concurrent} -r 5000 -P -S -l -A http://127.0.0.1:8080/index.html | tee -a  output/${PLATFORM}-${CORES}.log
+				else
+					cpuset -l ${h1load_cpu} h1load -d ${DURATION} -t ${CORES} -c ${concurrent} -r 5000 -P -S -l -A http://127.0.0.1:8080/index.html > output/${PLATFORM}-${CORES}.log
+				fi
 				sleep 5
 			done
 			;;
 		Linux)
-			for CORES in $( seq 1 ${RUN_CORES} ); do
-				echo "** CORES: ${CORES}"
+			for CORES in ${RUN_CORES_RANGE}; do
+				[ -z "${QUIET}" ] && echo "** CORES: ${CORES}" 1>&2
 				# Путь к конфигу в Debian обычно /etc/nginx/nginx.conf
 				sed "s/%%WORKER_PROCESSES%%/${CORES}/g" ${progdir}/lab1/${PLATFORM}/etc/nginx/nginx.conf > /etc/nginx/nginx.conf
 				concurrent=$(( 100 * CORES ))
 
-				init_cpuset_params
+				init_cpuset_params >&2
 				# NGINX запускаем на ядрах в диапазоне 0-3, HLOAD - 4-7
-				systemctl restart nginx
+				systemctl restart nginx > ${OUTPUT}  2>&1
 				for pid in $(pgrep nginx); do
-					taskset -pc ${nginx_cpu} ${pid} > /dev/null
+					taskset -pc ${nginx_cpu} ${pid} > ${OUTPUT}  2>&1
 				done
 				sleep 1
 
 				# Запускаем h1load на ядрах 4-7
-				taskset -c ${h1load_cpu} h1load -d ${DURATION} -t ${CORES} -c ${concurrent} -r 5000 -P -S -l -A http://127.0.0.1:8080/index.html | tee -a output/${PLATFORM}-${CORES}.log
+				if [ -z "${QUIET}" ]; then
+					taskset -c ${h1load_cpu} h1load -d ${DURATION} -t ${CORES} -c ${concurrent} -r 5000 -P -S -l -A http://127.0.0.1:8080/index.html | tee -a output/${PLATFORM}-${CORES}.log
+				else
+					taskset -c ${h1load_cpu} h1load -d ${DURATION} -t ${CORES} -c ${concurrent} -r 5000 -P -S -l -A http://127.0.0.1:8080/index.html > output/${PLATFORM}-${CORES}.log
+				fi
 				sleep 5
 			done
 			;;
@@ -81,38 +97,78 @@ run_test()
 	mini_stat
 }
 
+RUN_CORES_RANGE=
+QUIET=
+OUTPUT="/dev/stdout"
+
 ## MAIN
-while getopts "d:c:" opt; do
+while getopts "d:c:q" opt; do
 	case "${opt}" in
 		c) RUN_CORES="${OPTARG}" ;;
 		d) DURATION="${OPTARG}" ;;
+		q) QUIET="1"; OUTPUT="/dev/null" ;;
 	esac
 	shift $(($OPTIND - 1))
 done
 
+[ -z "${DURATION}" ] && DURATION="60"
+
+## parse cores params
 if [ -z "${RUN_CORES}" -o "${RUN_CORES}" = "0" ]; then
 	RUN_CORES=$(( ${CORES_ALL} / 2 ))
 	RUN_CORES=$(( RUN_CORES - 1 ))
-	echo "cores num selected (host cpu: ${CORES_ALL}): ${RUN_CORES}"
-fi
+	[ -z "${QUIET}" ] && echo "cores num selected (host cpu: ${CORES_ALL}): ${RUN_CORES}" 1>&2
 
-[ -z "${DURATION}" ] && DURATION="60"
-
-if [ ${RUN_CORES} -ne 1 ]; then
-	if [ $((RUN_CORES % 2)) -eq 0 ]; then
-		true
-	else
-		RUN_CORES=$(( RUN_CORES - 1 ))
-		echo "When utilizing multiple cores, an even number of cores must be used, reduced to: ${RUN_CORES}"
+	if [ ${RUN_CORES} -ne 1 ]; then
+		if [ $((RUN_CORES % 2)) -eq 0 ]; then
+			true
+		else
+			RUN_CORES=$(( RUN_CORES - 1 ))
+			[ -z "${QUIET}" ] && echo "When utilizing multiple cores, an even number of cores must be used, reduced to: ${RUN_CORES}" 1>&2
+		fi
 	fi
 fi
 
-if [ $((RUN_CORES * 2 )) -le $CORES_ALL ]; then
+# range, sequence?
+RESULT=""
+MAX=0
+
+OLD_IFS="${IFS}"
+IFS=","
+for item in ${RUN_CORES}; do
+	IFS="${OLD_IFS}"
+
+	if [ "${item}" != "${item#*-}" ]; then
+		start="${item%-*}"
+		end="${item#*-}"
+		sequence=$(seq "$start" "$end")
+		RESULT="${RESULT} ${sequence}"
+
+		if [ "$end" -gt "$MAX" ]; then
+			MAX="$end"
+		fi
+	else
+		# Если дефиса нет, просто добавляем число
+		RESULT="${RESULT} ${item}"
+
+		# Проверяем одиночное число
+		if [ "$item" -gt "$MAX" ]; then
+			MAX="$item"
+		fi
+	fi
+done
+
+IFS="$OLD_IFS"
+RUN_CORES_RANGE=$(echo $RESULT)
+##
+
+if [ $((MAX * 2 )) -le $CORES_ALL ]; then
 	true
 else
-	echo "Error: Core count exceeded: $RUN_CORES * 2 > $CORES_ALL"
+	err 1 "Error: Core count exceeded: $RUN_CORES * 2 > $CORES_ALL"
 fi
 
-[ ${RUN_CORES} -gt ${CORES_ALL} ] && err 1 "Insufficient cores ${RUN_CORES} > ${CORES_ALL}"
+[ ${MAX} -gt ${CORES_ALL} ] && err 1 "Insufficient cores ${RUN_CORES} > ${CORES_ALL}"
+[ -z "${QUIET}" ] && echo "Host Cores: ${CORES_ALL}, Test with cores: ${RUN_CORES_RANGE}" 1>&2
 
 run_test
