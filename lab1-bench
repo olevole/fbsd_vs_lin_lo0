@@ -32,49 +32,87 @@ init_cpuset_params()
 	esac
 }
 
-case "${PLATFORM}" in
-	FreeBSD)
-		for CORES in 1 2 3 4; do
-			echo "** CORES: ${CORES}"
-			sed "s/%%WORKER_PROCESSES%%/${CORES}/g" ${progdir}/lab1/${PLATFORM}/etc/nginx/nginx.conf > /usr/local/etc/nginx/nginx.conf
-			concurrent=$(( 100 * CORES ))
 
-			init_cpuset_params
+run_test()
+{
+	case "${PLATFORM}" in
+		FreeBSD)
+			for CORES in $( seq 1 ${RUN_CORES} ); do
+				echo "** CORES: ${CORES}"
+				sed "s/%%WORKER_PROCESSES%%/${CORES}/g" ${progdir}/lab1/${PLATFORM}/etc/nginx/nginx.conf > /usr/local/etc/nginx/nginx.conf
+				concurrent=$(( 100 * CORES ))
 
-			# NGINX запускаем на ядрах в диапазоне 0-3, HLOAD - 4-7
-			service nginx restart
-			for pid in $(pgrep nginx); do
-				cpuset -l ${nginx_cpu} -p ${pid}
+				init_cpuset_params
+
+				# NGINX запускаем на ядрах в диапазоне 0-3, HLOAD - 4-7
+				service nginx restart
+				for pid in $(pgrep nginx); do
+					cpuset -l ${nginx_cpu} -p ${pid}
+				done
+				sleep 1
+
+				# Запускаем h1load на ядрах 4-8
+				cpuset -l ${h1load_cpu} h1load -d ${DURATION} -t ${CORES} -c ${concurrent} -r 5000 -P -S -l -A http://127.0.0.1:8080/index.html | tee -a  output/${PLATFORM}-${CORES}.log
+				sleep 5
 			done
-			sleep 1
+			;;
+		Linux)
+			for CORES in $( seq 1 ${RUN_CORES} ); do
+				echo "** CORES: ${CORES}"
+				# Путь к конфигу в Debian обычно /etc/nginx/nginx.conf
+				sed "s/%%WORKER_PROCESSES%%/${CORES}/g" ${progdir}/lab1/${PLATFORM}/etc/nginx/nginx.conf > /etc/nginx/nginx.conf
+				concurrent=$(( 100 * CORES ))
 
-			# Запускаем h1load на ядрах 4-8
-			cpuset -l ${h1load_cpu} h1load -d 60 -t ${CORES} -c ${concurrent} -r 5000 -P -S -l -A http://127.0.0.1:8080/index.html | tee -a  output/${PLATFORM}-${CORES}.log
-			sleep 5
-		done
-		;;
-	Linux)
-		for CORES in 1 2 3 4; do
-			echo "** CORES: ${CORES}"
-			# Путь к конфигу в Debian обычно /etc/nginx/nginx.conf
-			sed "s/%%WORKER_PROCESSES%%/${CORES}/g" ${progdir}/lab1/${PLATFORM}/etc/nginx/nginx.conf > /etc/nginx/nginx.conf
-			concurrent=$(( 100 * CORES ))
+				init_cpuset_params
+				# NGINX запускаем на ядрах в диапазоне 0-3, HLOAD - 4-7
+				systemctl restart nginx
+				for pid in $(pgrep nginx); do
+					taskset -pc ${nginx_cpu} ${pid} > /dev/null
+				done
+				sleep 1
 
-			init_cpuset_params
-			# NGINX запускаем на ядрах в диапазоне 0-3, HLOAD - 4-7
-			systemctl restart nginx
-			for pid in $(pgrep nginx); do
-				taskset -pc ${nginx_cpu} ${pid} > /dev/null
+				# Запускаем h1load на ядрах 4-7
+				taskset -c ${h1load_cpu} h1load -d ${DURATION} -t ${CORES} -c ${concurrent} -r 5000 -P -S -l -A http://127.0.0.1:8080/index.html | tee -a output/${PLATFORM}-${CORES}.log
+				sleep 5
 			done
-			sleep 1
+			;;
+	esac
 
-			# Запускаем h1load на ядрах 4-7
-			taskset -c ${h1load_cpu} h1load -d 60 -t ${CORES} -c ${concurrent} -r 5000 -P -S -l -A http://127.0.0.1:8080/index.html | tee -a output/${PLATFORM}-${CORES}.log
-			sleep 5
-		done
-		;;
-esac
+	mini_stat
+}
 
-# GNUPLOT
-#${AWK_CMD} '/pctl/ {out=1; next} out {if (/^$/ || /^#/) out=0; else print}' output.log > latency.dat
-#echo "gnuplot plot_latency.gp"
+## MAIN
+while getopts "d:c:" opt; do
+	case "${opt}" in
+		c) RUN_CORES="${OPTARG}" ;;
+		d) DURATION="${OPTARG}" ;;
+	esac
+	shift $(($OPTIND - 1))
+done
+
+if [ -z "${RUN_CORES}" -o "${RUN_CORES}" = "0" ]; then
+	RUN_CORES=$(( ${CORES_ALL} / 2 ))
+	RUN_CORES=$(( RUN_CORES - 1 ))
+	echo "cores num selected (host cpu: ${CORES_ALL}): ${RUN_CORES}"
+fi
+
+[ -z "${DURATION}" ] && DURATION="60"
+
+if [ ${RUN_CORES} -ne 1 ]; then
+	if [ $((RUN_CORES % 2)) -eq 0 ]; then
+		true
+	else
+		RUN_CORES=$(( RUN_CORES - 1 ))
+		echo "When utilizing multiple cores, an even number of cores must be used, reduced to: ${RUN_CORES}"
+	fi
+fi
+
+if [ $((RUN_CORES * 2 )) -le $CORES_ALL ]; then
+	true
+else
+	echo "Error: Core count exceeded: $RUN_CORES * 2 > $CORES_ALL"
+fi
+
+[ ${RUN_CORES} -gt ${CORES_ALL} ] && err 1 "Insufficient cores ${RUN_CORES} > ${CORES_ALL}"
+
+run_test

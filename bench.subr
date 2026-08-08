@@ -2,7 +2,36 @@ if [ ! "$_BENCH_SUBR" ]; then
 _BENCH_SUBR=1
 ###
 
+# fatal error. Print message to stdout then quit with exitval
+err() {
+	exitval=$1
+	shift
+	echo "$*" 1>&2
+	exit ${exitval}
+}
+
+mini_stat()
+{
+	local _ministat_args= i=
+
+	_ministat_args="-s -w 74"
+
+	[ -z "${MINISTAT_CMD}" ] && return 0
+	for i in $( seq 1 ${RUN_CORES} ); do
+		${progdir}/parselog-ministat.sh output/FreeBSD-${i}.log > output/ministat-${i}.log
+		_ministat_args="${_ministat_args} output/ministat-${i}.log"
+	done
+
+	set -o xtrace
+	${MINISTAT_CMD} ${_ministat_args}
+	set +o xtrace
+
+}
+
+
 PLATFORM=$( uname -s )
+CORES_ALL=$( nproc )
+MINISTAT_CMD=
 
 case ${PLATFORM} in
 	Linux)
@@ -10,6 +39,7 @@ case ${PLATFORM} in
 		;;
 	FreeBSD)
 		AWK_CMD="gawk"
+		MINISTAT_CMD=$( command -v "ministat" 2>/dev/null )
 		;;
 esac
 

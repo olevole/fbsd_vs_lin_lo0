@@ -1,0 +1,8 @@
+./parselog-ministat.sh output/FreeBSD-1.log > output/ministat-1.log
+#./parselog-ministat.sh output/FreeBSD-2.log > output/ministat-2.log
+
+
+#ministat -s -w 74 output/ministat-1.log output/ministat-2.log output/ministat-3.log output/ministat-4.log
+ministat -s -w 74 output/ministat-1.log
+# output/ministat-2.log
+

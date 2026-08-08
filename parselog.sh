@@ -1,5 +1,4 @@
 #!/bin/sh
-#!/bin/sh
 progdir="${0%/*}"
 [ "$progdir" = "$0" ] && progdir="."
 progdir=$(cd "$progdir" && pwd -P)
